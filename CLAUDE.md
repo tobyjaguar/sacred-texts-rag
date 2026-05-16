@@ -1,5 +1,8 @@
 # CLAUDE.md — sacred-texts-rag
 
+@SPEC.md
+@MEMORY.md
+
 ## Project
 Convert a local mirror of sacred-texts.com (~140k HTML files on an external SSD) into a clean text corpus, chunk it, embed it, and build a local vector index for RAG.
 
@@ -24,7 +27,8 @@ Override via env vars `SACRED_SRC` and `SACRED_OUT` or CLI flags `--src` / `--ou
 ## Conventions
 
 - Python 3.11+ (developing on 3.14).
-- Single-package layout under `src/`. Run modules with `python -m src.convert`.
+- **Always use the project venv**: `.venv/bin/python`, `.venv/bin/pytest`, `.venv/bin/pip`. Don't fall back to system `python3`.
+- Single-package layout under `src/`. Run modules with `.venv/bin/python -m src.convert`.
 - Type-annotate public functions; keep internals untyped if it adds noise.
 - Tests live under `tests/`, use pytest. Fixtures are real `.htm` samples from the mirror.
 - One CLI per stage. Use `argparse`. No global config singleton.
