@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing as mp
 import os
 import re
 import sys
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Iterator
 
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 DEFAULT_SRC = Path(os.environ.get("SACRED_SRC", "/Volumes/Extreme Pro/Sacred-Texts"))
 DEFAULT_OUT = Path(
@@ -98,11 +100,51 @@ def iter_html(src_root: Path) -> Iterator[Path]:
                 yield path
 
 
+def _process_file(job: tuple[str, str, str]) -> dict | None:
+    """Worker: read one HTML file, write its .txt, return its manifest record.
+
+    Returns None for empty / unreadable files. Returns {"error": ..., "source": ...}
+    when conversion raises, so the parent can log without crashing the pool.
+    """
+    src_str, src_root_str, out_root_str = job
+    src_path = Path(src_str)
+    src_root = Path(src_root_str)
+    out_root = Path(out_root_str)
+    rel = src_path.relative_to(src_root)
+
+    try:
+        html = src_path.read_bytes().decode("utf-8", errors="replace")
+        converted = convert_html(html)
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}", "source": rel.as_posix()}
+
+    if not converted.body:
+        return None
+
+    out_path = out_root / rel.with_suffix(".txt")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    header = f"# {converted.title}\n\n" if converted.title else ""
+    out_path.write_text(f"{header}{converted.body}\n", encoding="utf-8")
+
+    return {
+        "source": rel.as_posix(),
+        "output": out_path.relative_to(out_root.parent).as_posix(),
+        "title": converted.title,
+        "bytes": out_path.stat().st_size,
+    }
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--src", type=Path, default=DEFAULT_SRC, help="HTML mirror root")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output .txt root")
     p.add_argument("--limit", type=int, default=None, help="Stop after N files (smoke test)")
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=os.cpu_count() or 4,
+        help="Worker processes (default: CPU count)",
+    )
     args = p.parse_args()
 
     if not args.src.exists():
@@ -111,45 +153,40 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     manifest_path = args.out.parent / "manifest.jsonl"
 
-    n = 0
-    with manifest_path.open("w", encoding="utf-8") as manifest:
-        for src_path in iter_html(args.src):
-            if args.limit is not None and n >= args.limit:
-                break
+    print(f"walking {args.src} …", file=sys.stderr)
+    src_paths = list(iter_html(args.src))
+    if args.limit is not None:
+        src_paths = src_paths[: args.limit]
+    total = len(src_paths)
+    print(f"found {total} files; converting with {args.workers} workers", file=sys.stderr)
 
-            try:
-                raw = src_path.read_bytes()
-            except OSError as e:
-                print(f"skip {src_path}: {e}", file=sys.stderr)
+    jobs = [(str(p), str(args.src), str(args.out)) for p in src_paths]
+
+    written = 0
+    skipped = 0
+    errors = 0
+    with manifest_path.open("w", encoding="utf-8") as manifest, mp.Pool(args.workers) as pool:
+        for record in tqdm(
+            pool.imap_unordered(_process_file, jobs, chunksize=32),
+            total=total,
+            unit="file",
+            smoothing=0.1,
+        ):
+            if record is None:
+                skipped += 1
                 continue
-            html = raw.decode("utf-8", errors="replace")
-
-            converted = convert_html(html)
-            if not converted.body:
+            if "error" in record:
+                errors += 1
+                print(f"error {record['source']}: {record['error']}", file=sys.stderr)
                 continue
+            manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
+            written += 1
 
-            rel = src_path.relative_to(args.src)
-            out_path = args.out / rel.with_suffix(".txt")
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-
-            header = f"# {converted.title}\n\n" if converted.title else ""
-            out_path.write_text(f"{header}{converted.body}\n", encoding="utf-8")
-
-            manifest.write(
-                json.dumps(
-                    {
-                        "source": rel.as_posix(),
-                        "output": out_path.relative_to(args.out.parent).as_posix(),
-                        "title": converted.title,
-                        "bytes": out_path.stat().st_size,
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            n += 1
-
-    print(f"converted {n} files → {args.out}")
+    print(
+        f"converted {written} files → {args.out} "
+        f"(skipped {skipped} empty, {errors} errors)",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":
