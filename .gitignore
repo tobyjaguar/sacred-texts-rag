@@ -1,0 +1,35 @@
+# Derived data — never commit
+data/
+*.txt
+*.jsonl
+*.parquet
+*.faiss
+*.lance
+vectors/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# But DO commit test fixtures
+!tests/fixtures/**
