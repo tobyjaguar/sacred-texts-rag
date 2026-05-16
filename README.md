@@ -1,6 +1,8 @@
 # sacred-texts-rag
 
-Convert a local mirror of the [sacred-texts.com](https://sacred-texts.com) archive (~140k HTML files, ~1.8 GB) into clean `.txt` files, chunk them, embed them, and build a vector index for retrieval-augmented generation (RAG).
+Convert a local mirror of the [sacred-texts.com](https://sacred-texts.com) archive (~140k HTML files, ~1.8 GB) into a clean text corpus, chunk it, embed it, and build a vector index for retrieval-augmented generation (RAG).
+
+**Status:** corpus extracted, paused before chunking — see [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Pipeline
 
