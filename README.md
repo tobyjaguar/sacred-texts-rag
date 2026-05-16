@@ -36,11 +36,14 @@ Output layout under `SACRED_OUT`:
 
 ```
 sacred-texts-rag-data/
-├── txt/                  # mirrored tree, e.g. bib/kjv/gen001.txt
-├── manifest.jsonl        # one line per source file: path, title, size
+├── corpus.jsonl          # one line per document: source, title, body, bytes
 ├── chunks.jsonl          # chunked records ready for embedding
 └── vectors/              # vector store files
 ```
+
+The corpus is a single JSONL because `SACRED_OUT` lives on an
+exFAT-formatted external drive (1 MB cluster size); a mirrored `.txt`
+tree of ~140k tiny files allocates ~135 GB for ~1 GB of text.
 
 ## Setup
 
@@ -53,11 +56,11 @@ pip install -e .
 ## Usage (planned)
 
 ```bash
-# Convert HTML → clean .txt
-python -m src.convert --src "$SACRED_SRC" --out "$SACRED_OUT/txt"
+# Convert HTML → corpus.jsonl
+python -m src.convert --src "$SACRED_SRC" --out "$SACRED_OUT"
 
 # Chunk
-python -m src.chunk --in "$SACRED_OUT/txt" --out "$SACRED_OUT/chunks.jsonl"
+python -m src.chunk --in "$SACRED_OUT/corpus.jsonl" --out "$SACRED_OUT/chunks.jsonl"
 
 # Embed + index
 python -m src.embed --in "$SACRED_OUT/chunks.jsonl" --out "$SACRED_OUT/vectors"

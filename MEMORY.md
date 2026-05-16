@@ -8,6 +8,12 @@ the code. Keep entries short; link to PR / commit when relevant.
 - **Output dir**: `/Volumes/Extreme Pro/sacred-texts-rag-data/` (external SSD,
   same drive as the source mirror). Derived data is large (~3 GB) and external
   to the repo. Override with `SACRED_OUT`.
+- **Single `corpus.jsonl`, no `.txt` tree** (pivoted 2026-05-16 after first
+  full run). The SSD is exFAT for cross-OS portability (macOS ↔ Linux), and
+  exFAT on large volumes uses 1 MB cluster size. The original mirrored-tree
+  output allocated ~135 GB for ~1.16 GB of actual text. Downstream stages
+  stream JSONL anyway, so this is the right shape. No `--format` flag — if
+  we ever need a single text extracted, write a 5-line helper.
 - **HTML parser**: `lxml` via BeautifulSoup. The mirror is uniform HTML4 with
   uppercase tags and unclosed `<P>`; `html.parser` is too forgiving in
   inconsistent ways, `lxml` normalizes reliably.

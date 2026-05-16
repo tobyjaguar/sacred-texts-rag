@@ -17,11 +17,17 @@ Output tree under `SACRED_OUT`:
 
 ```
 sacred-texts-rag-data/
-├── txt/                   # mirrored .txt tree (one per converted .htm)
-├── manifest.jsonl         # one line per converted source file
+├── corpus.jsonl           # one line per converted document (convert.py)
 ├── chunks.jsonl           # produced by chunk.py
 └── vectors/               # produced by embed.py / index.py
 ```
+
+The corpus is packed into a single JSONL rather than a mirrored `.txt`
+tree because `SACRED_OUT` typically lives on an exFAT-formatted external
+drive (cross-platform with Linux). exFAT cluster sizes on large volumes
+are commonly 1 MB, which is catastrophic for ~140k mostly-tiny files
+(~135 GB allocated for ~1 GB of text). Downstream stages stream JSONL
+anyway, so this is the natural shape.
 
 ## 1. Stage 1 — `src/convert.py`
 
@@ -56,45 +62,34 @@ The mirror is uniform HTML4:
 5. Re-parse the kept fragment. Walk block-level elements (`h1`-`h6`, `p`) in document order, extracting text with whitespace collapsed to single spaces. Drop empty blocks.
 6. Join blocks with a blank line (`\n\n`).
 
-### Output `.txt` file
-```
-# {title}
-
-{block 1}
-
-{block 2}
-
-…
-```
-Path mirrors the source: `bib/kjv/gen001.htm` → `txt/bib/kjv/gen001.txt`.
-
-### `manifest.jsonl` schema
-One JSON object per line:
+### Output: `corpus.jsonl`
+One JSON object per line, sorted by `source`:
 
 ```json
 {
   "source": "bib/kjv/gen001.htm",
-  "output": "txt/bib/kjv/gen001.txt",
   "title":  "King James Version: Genesis: Genesis Chapter 1",
+  "body":   "King James Version: Genesis Chapter 1\n\n1 In the beginning…",
   "bytes":  4321
 }
 ```
 
-`source` and `output` are POSIX-style paths relative to `SACRED_SRC` and
-`SACRED_OUT`, respectively.
+`source` is a POSIX-style path relative to `SACRED_SRC`. `bytes` is the
+UTF-8 length of `body`.
 
 ### CLI
 ```
-python -m src.convert --src "$SACRED_SRC" --out "$SACRED_OUT/txt" [--limit N]
+python -m src.convert --src "$SACRED_SRC" --out "$SACRED_OUT" [--limit N] [--workers N]
 ```
 
-`--limit N` stops after N successful conversions (smoke testing).
+- `--limit N` stops after N input files (smoke testing).
+- `--workers N` overrides the worker count (defaults to `os.cpu_count()`).
 
 ## 2. Stage 2 — `src/chunk.py` (not yet implemented)
 
-Reads `SACRED_OUT/txt/**/*.txt` plus `manifest.jsonl`, emits `chunks.jsonl`.
-Each chunk carries: chunk id, source path, title, tradition (top-level dir),
-text, char offsets, token count (approximate).
+Streams `SACRED_OUT/corpus.jsonl`, emits `chunks.jsonl`. Each chunk
+carries: chunk id, source path, title, tradition (top-level dir of
+`source`), text, char offsets, token count (approximate).
 
 Chunk size, overlap, and tokenizer are TBD; record decisions here once made.
 
